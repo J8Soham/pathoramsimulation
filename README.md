@@ -17,3 +17,7 @@ when initializing do we push dumpy blocks everywhere?
 
 reminder: 
 When eviction you need to use the potion map value to put it back in the correct place. 
+
+
+we don't have to prove that the path-oram is oblivious. Progress report
+Simulartor (fun):
