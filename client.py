@@ -60,43 +60,34 @@ class Client:
                     if existing is None:
                         self.stash.append(decrypted)
     
-    def _add_to_bucket(self, index, bucket, block):
+    def _add_to_bucket(self, index, encrypted_block):
+        bucket = self.server.get_bucket(index)
         for i in range(self.bucket_size):
             decrypted = self._decrypt_block(bucket.blocks[i].encrypted_data)
             if decrypted["is_dummy"]:
-                bucket.blocks[i].encrypted_data = self._encrypt_block(block)
+                bucket.blocks[i].encrypted_data = encrypted_block
                 self.server.write_bucket(index, bucket)
                 return True
         return False
-    
+
     def _write_back(self, leaf):
         path = self._get_path(leaf)
-        encrypted_buckets = []
-        for node in range(len(path)):
-            bucket_data = []
-            filled = 0
-            remaining_stash = []
-            for block in self.stash:
-                if filled < (self.bucket_size * self.num_levels):
-                    block_leaf = self.position_map.get(block["key"])
-                    block_path = self._get_path(block_leaf)
-                    if path[node] in block_path:
-                        see_these = block_path[node:]
-                        old_filled = filled
-                        for element in see_these:
-                            bucket = self.server.get_bucket(element)
-                            can_add = self._add_to_bucket(element, bucket, self._encrypt_block(block))
-                            if can_add:
-                                filled += 1
-                                break
-                        if filled == old_filled:
-                            remaining_stash.append(block)    
-                        if (filled - old_filled > 1):
-                            print("Error: added twice")
-                else:
-                    remaining_stash.append(block)
-            self.stash = remaining_stash
-        
+        remaining_stash = []
+        filled = 0
+        for block in self.stash:
+            block_leaf = self.position_map.get(block["key"])
+            block_path = self._get_path(block_leaf)
+            placed = False
+            for node in path:
+                if node in block_path:
+                    if self._add_to_bucket(node, self._encrypt_block(block)):
+                        placed = True
+                        filled += 1
+                        break
+            if not placed:
+                remaining_stash.append(block)
+        self.stash = remaining_stash
+
         while filled < (self.bucket_size * self.num_levels):
             dummy = {"key": "", "value": "", "is_dummy": True}
             random_bucket = path[random.randint(0, len(path) - 1)]

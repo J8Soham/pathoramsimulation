@@ -8,11 +8,11 @@ def main():
     client.write("d", "date")
     client.write("e", "elderberry")
     for k in ["a", "b", "c", "d", "e"]:
-        print(f"read({k}) = {client.read(k)}")
+        client.read(k)
 
     client.write("c", "coconut")
-    print(f"read(c) = {client.read('c')}")
-    print(f"read(z) = {client.read('z')}")
+    client.read("c")
+    client.read("z")
 
     for node_idx in range(1, len(client.server.tree)):
         bucket = client.server.tree[node_idx]
