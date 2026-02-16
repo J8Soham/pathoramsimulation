@@ -23,10 +23,12 @@ class Server:
             node //= 2
         return path
 
-    def evict(self, leaf, encrypted_buckets): # use the position map info to write it back correctly. 
-        node = leaf
-        for bucket_data in encrypted_buckets:
-            for i, enc_block in enumerate(bucket_data):
-                self.tree[node].blocks[i].encrypted_data = enc_block
-            node //= 2
+    def get_bucket(self, index: int):
+        if index < 1 or index > self.num_nodes:
+            raise IndexError("Bucket index out of range")
+        return self.tree[index]
 
+    def write_bucket(self, index: int, bucket: Bucket):
+        if index < 1 or index > self.num_nodes:
+            raise IndexError("Bucket index out of range")
+        self.tree[index] = bucket

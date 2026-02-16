@@ -10,14 +10,12 @@ what if we make the stash a queue or stack does it change leakage? ()
 when done with read and write do we transvere every part of the stash?
 + it is an array you have to try and evict everything in the stast. 
 
-
 when initializing do we push dumpy blocks everywhere?
-+ yes, when need to intializie 
++ yes, when need to intializie and done on the client side.  
 + If we start with dummies and each block contains dummie. Write operation 
 
 reminder: 
 When eviction you need to use the potion map value to put it back in the correct place. 
-
 
 we don't have to prove that the path-oram is oblivious. Progress report
 Simulartor (fun):
