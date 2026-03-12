@@ -3,19 +3,18 @@ import math
 import json
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from client import Client
-from utils import adj_padding
 
 class SealClient:
     def __init__(self, alpha, dataset, x=1, bucket_size=4):
-        self.alpha = alpha # number of bits leaked
-        self.x = x # padding 
+        self.alpha = alpha
+        self.x = x
         self.num_orams = 1 << alpha
         self.bucket_size = bucket_size
         self.prp_key = AESGCM.generate_key(bit_length=128)
         self.prp = AESGCM(self.prp_key)
         self.access_log = []
 
-        padded_dataset = adj_padding(dataset, x)
+        padded_dataset = self._adj_padding(dataset, x)  
 
         self.M = []
         for keyword in sorted(padded_dataset.keys()):
@@ -49,6 +48,29 @@ class SealClient:
             value = doc_id if doc_id is not None else ""
             oram_idx = self._prp_to_oram(i)
             self.orams[oram_idx].write(str(i), value)
+
+    def _adj_padding(self, dataset, x):
+        """ADJ-Padding(x, D) from SEAL 
+        basically we want to pad each keyword's document list to 2^x 
+        along with paddding dataset size to x * N (return this dataset for compute)
+        """
+        if x <= 1:
+            return dataset
+        N = sum(len(docs) for docs in dataset.values())
+        padded = {}
+        for keyword, doc_ids in dataset.items():
+            count = len(doc_ids)
+            padded_count = 1
+            while padded_count < count:
+                padded_count *= x
+            dummy_count = padded_count - count
+            padded[keyword] = list(doc_ids) + [None] * dummy_count
+        padded_total = sum(len(docs) for docs in padded.values())
+        target_total = x * N
+        if padded_total < target_total:
+            extra = target_total - padded_total
+            padded["__dummy_kw__"] = [None] * extra
+        return padded
 
     def _prp_to_oram(self, index):
         padded = str(index).encode().ljust(16, b'\x00')[:16]

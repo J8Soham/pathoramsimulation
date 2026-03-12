@@ -1,6 +1,5 @@
 datasets/
-load_data.py
-plot.py
 *.png
 *.json
 __pycache__/
+.venv/

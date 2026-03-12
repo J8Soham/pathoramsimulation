@@ -1,3 +1,26 @@
+Algorithms implementd:
+
+SEAL - This is a wrapper on top of our Path-ORAM implementation implented in seal_client.py
+
+Path-ORAM (client.py): Currently using a position map version of Path-ORAM. 
+
+
+main.py: 
+First attack: Query Recovery Attack 
+Basically the adversary needs to find which keyword was queried
+1. knows the plaintext dataset  
+2. knows the queries t_q and resulting volumes
+Now the goal is to match the queries t_q to which keyword from the dataset by using the matching volumes (hypothetically padding will reduce this as it has to choose from more keywords with similar volumes)
+
+
+Second Attack: Database Recovery Attack 
+Basically the adversary needs to find which keyword was queried
+1. knows the plaintext dataset 
+2. knows the queries t_q and resulting encrypted tuples as well as which ORAM that querry went to (alpha bit)
+now the goal with the encrypted dataset can it match the encrypted tuples for a query can it match what plaintext tuple was given to get the keyword. 
+
+
+
 Pending changes and questions:
 
 what is the size of the stash? 
