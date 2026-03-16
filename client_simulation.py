@@ -60,14 +60,6 @@ def simulate_seal_access(alpha, M, odict, query_sequence):
     prp = AESGCM(prp_key)
     num_orams = 1 << alpha
 
-    def prp_to_oram(index):
-        padded = str(index).encode().ljust(16, b'\x00')[:16]
-        nonce = b'\x00' * 12
-        encrypted = prp.encrypt(nonce, padded, None)
-        if alpha == 0:
-            return 0
-        return encrypted[0] % num_orams
-
     index_to_oram = {}
     for i in range(len(M)):
         index_to_oram[i] = prp_to_oram(i)
@@ -84,4 +76,12 @@ def simulate_seal_access(alpha, M, odict, query_sequence):
         query_results_volumes.append((kw, cnt_w))
         query_results_tuples.append((kw, tuples))
 
-    return query_results_volumes, query_results_tuples
+    return query_results_volumes, query_results_tuples, index_to_oram
+
+def prp_to_oram(index):
+    padded = str(index).encode().ljust(16, b'\x00')[:16]
+    nonce = b'\x00' * 12
+    encrypted = prp.encrypt(nonce, padded, None)
+    if alpha == 0:
+        return 0
+    return encrypted[0] % num_orams

@@ -19,14 +19,14 @@ def query_recovery_attack(padded_volumes, queries_with_volumes):
             correct += 1
     return correct / total if total > 0 else 0.0
 
-def database_recovery_attack(padded_volumes, queries_with_tuples, alpha):
+def database_recovery_attack(padded_volumes, queries_with_tuples, alpha, index_to_oram):
     num_orams = 1 << alpha
     oram_groups = {}
     idx = 0
     for kw in sorted(padded_volumes.keys()):
         vol = padded_volumes[kw]
         for _ in range(vol):
-            oram_id = idx % num_orams if alpha > 0 else 0
+            oram_id = index_to_oram[idx]
             oram_groups.setdefault(oram_id, []).append({"idx": idx, "keyword": kw})
             idx += 1
     T = dict(padded_volumes)
@@ -124,9 +124,9 @@ def test_simulation():
             M, odict = build_sorted_array(padded_volumes)
 
             for alpha in ALPHA_VALUES:
-                qr_volumes, qr_tuples = simulate_seal_access(alpha, M, odict, query_sequence)
+                qr_volumes, qr_tuples, index_to_oram = simulate_seal_access(alpha, M, odict, query_sequence)
                 qr_success = query_recovery_attack(padded_volumes, qr_volumes)
-                dr_success = database_recovery_attack(padded_volumes, qr_tuples, alpha)
+                dr_success = database_recovery_attack(padded_volumes, qr_tuples, alpha, index_to_oram)
 
                 key = f"a{alpha}_x{x}"
                 results[key] = {

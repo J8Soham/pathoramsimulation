@@ -1,5 +1,6 @@
 datasets/
 *.png
+*.txt
 *.json
 __pycache__/
 .venv/
