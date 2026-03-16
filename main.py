@@ -26,7 +26,7 @@ def database_recovery_attack(padded_volumes, queries_with_tuples, alpha, index_t
     for kw in sorted(padded_volumes.keys()):
         vol = padded_volumes[kw]
         for _ in range(vol):
-            oram_id = index_to_oram[idx]
+            oram_id = index_to_oram[idx] # realized that we need to have 
             oram_groups.setdefault(oram_id, []).append({"idx": idx, "keyword": kw})
             idx += 1
     T = dict(padded_volumes)
@@ -97,18 +97,31 @@ def test_seal():
                     if block.encrypted_data is not None:
                         assert isinstance(block.encrypted_data, bytes), "SEAL oram data should be raw bytes"
 
+
+'''
+orders = 9
+lineitem = 16
+customer = 8
+part = 9
+partsupp = 5
+supplier = 7
+nation = 4
+region = 3
+'''
+
 NUM_QUERIES = 100
 ALPHA_VALUES = [0, 1, 2, 3, 4]
 X_VALUES = [1, 2, 4]
+ATTRIBUTE = 3
 
 def test_simulation():
     # load datasets
     crime_freqs = load_crime_frequencies(max_rows=10000)
-    tpch_freqs = load_tpch_frequencies(max_rows=10000)
+    orders_tpch_freqs = load_tpch_frequencies("orders", max_rows=10000)[ATTRIBUTE]
     print("finished loading datasets")
 
     all_results = {}
-    for name, keyword_volumes in [("crime", crime_freqs), ("tpch", tpch_freqs)]:
+    for name, keyword_volumes in [("crime", crime_freqs), ("tpch", orders_tpch_freqs)]:
         keywords = [kw for kw in keyword_volumes.keys() if kw != "__dummy_kw__"]
         print(f"\nDataset: {name} ({len(keywords)} keywords, {sum(keyword_volumes.values())} records)")
 

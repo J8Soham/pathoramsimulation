@@ -50,10 +50,11 @@ class SealClient:
             self.orams[oram_idx].write(str(i), value)
 
     def _adj_padding(self, dataset, x):
-        """ADJ-Padding(x, D) from SEAL 
+        '''
+        ADJ-Padding(x, D) from SEAL 
         basically we want to pad each keyword's document list to 2^x 
         along with paddding dataset size to x * N (return this dataset for compute)
-        """
+        '''
         if x <= 1:
             return dataset
         N = sum(len(docs) for docs in dataset.values())
@@ -73,6 +74,11 @@ class SealClient:
         return padded
 
     def _prp_to_oram(self, index):
+        '''
+        Basically we want to map each index to an oram id so that we can recreate it anytimes
+        this means it has to be deterministic 
+        doesn't affect the security cause it can be know by adversary (see Database recovery attack which literally gets passed the index_to_oram)
+        '''
         padded = str(index).encode().ljust(16, b'\x00')[:16]
         nonce = b'\x00' * 12
         encrypted = self.prp.encrypt(nonce, padded, None)
