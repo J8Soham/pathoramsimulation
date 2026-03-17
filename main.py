@@ -181,9 +181,10 @@ def test_simulation_equivalence(num_of_queries, attribute):
     print(f"Actual SEAL QR Success: {qr_success_actual:.10%}")
     return dr_success_sim, dr_success_actual, qr_success_sim, qr_success_actual
 
-
-ALPHA_VALUES = [0, 1, 2, 3, 4]
-X_VALUES = [1, 2, 4]
+ALPHA_VALUES = [0, 4, 8, 12, 16, 20, 24]
+X_VALUES = [1, 2, 4, 8, 16, 32, 64]
+NUM_QUERIES = 1000
+ATTRIBUTE = 5
 
 def test_simulation():
     # load datasets
@@ -225,37 +226,57 @@ def test_simulation():
 
     with open("results.json", "w") as f:
         json.dump(all_results, f, indent=2)
-    print("results made")
+
+    for metric_name, metric_key in [("Query Recovery", "query_recovery"), ("Database Recovery", "database_recovery")]:
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+        for i, (name, title) in enumerate([("crime", "Crime Dataset"), ("tpch", "TPC-H Orders Dataset")]):
+            ax = axes[i]
+            for x in X_VALUES:
+                y_values = []
+                for alpha in ALPHA_VALUES:
+                    key = f"a{alpha}_x{x}"
+                    if key in all_results[name]:
+                        y_values.append(all_results[name][key][metric_key] * 100) # percentage
+                ax.plot(ALPHA_VALUES[:len(y_values)], y_values, marker='o', label=f"x={x}")
+            
+            ax.set_xlabel("Alpha (bits)")
+            ax.set_ylabel(f"{metric_name} Success Rate (%)")
+            ax.set_title(title)
+            ax.legend()
+            ax.grid(True)
+            
+        plt.tight_layout()
+        plt.savefig(f"{metric_key}_plot.png")
 
 if __name__ == "__main__":
     # test_path_oram()
     # test_seal()
-    # test_simulation()
+    test_simulation()
 
-    # comment this out to remove the simulation equivalence test
-    dr_sim_results = []
-    dr_act_results = []
-    qr_sim_results = []
-    qr_act_results = []
-    list_of_queries = [10, 100, 1000, 10000]
-    for queries in list_of_queries:
-        dr_sim, dr_act, qr_sim, qr_act = test_simulation_equivalence(queries, 3)
-        dr_sim_results.append(dr_sim)
-        dr_act_results.append(dr_act)
-        qr_sim_results.append(qr_sim)
-        qr_act_results.append(qr_act)
+    # comment this out to remove the simulation equivalence test - should probably put this in a function. 
+    # dr_sim_results = []
+    # dr_act_results = []
+    # qr_sim_results = []
+    # qr_act_results = []
+    # list_of_queries = [10, 100, 1000, 10000]
+    # for queries in list_of_queries:
+    #     dr_sim, dr_act, qr_sim, qr_act = test_simulation_equivalence(queries, 3)
+    #     dr_sim_results.append(dr_sim)
+    #     dr_act_results.append(dr_act)
+    #     qr_sim_results.append(qr_sim)
+    #     qr_act_results.append(qr_act)
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(list_of_queries, dr_sim_results, label='Simulation DR', marker='o', linestyle='-', color='blue')
-    plt.plot(list_of_queries, dr_act_results, label='Actual SEAL DR', marker='x', linestyle='--', color='lightblue')
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(list_of_queries, dr_sim_results, label='Simulation DR', marker='o', linestyle='-', color='blue')
+    # plt.plot(list_of_queries, dr_act_results, label='Actual SEAL DR', marker='x', linestyle='--', color='lightblue')
     
-    plt.plot(list_of_queries, qr_sim_results, label='Simulation QR', marker='s', linestyle='-', color='red')
-    plt.plot(list_of_queries, qr_act_results, label='Actual SEAL QR', marker='d', linestyle='--', color='lightcoral')
+    # plt.plot(list_of_queries, qr_sim_results, label='Simulation QR', marker='s', linestyle='-', color='red')
+    # plt.plot(list_of_queries, qr_act_results, label='Actual SEAL QR', marker='d', linestyle='--', color='lightcoral')
     
-    plt.xscale('log')
-    plt.xlabel('Number of Queries')
-    plt.ylabel('Attack Success Rate')
-    plt.title('Convergence of Database and Query Recovery Attacks')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('convergence_plot.png')
+    # plt.xscale('log')
+    # plt.xlabel('Number of Queries')
+    # plt.ylabel('Attack Success Rate')
+    # plt.title('Convergence of Database and Query Recovery Attacks')
+    # plt.legend()
+    # plt.grid(True)
+    # plt.savefig('convergence_plot.png')
