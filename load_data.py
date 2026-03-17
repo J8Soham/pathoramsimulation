@@ -11,7 +11,19 @@ PARTSUP_TBL = os.path.join(os.path.dirname(__file__), "datasets", "tpch", "tpch-
 SUPPLIER_TBL = os.path.join(os.path.dirname(__file__), "datasets", "tpch", "tpch-dbgen", "supplier.tbl")
 NATION_TBL = os.path.join(os.path.dirname(__file__), "datasets", "tpch", "tpch-dbgen", "nation.tbl")
 REGION_TBL = os.path.join(os.path.dirname(__file__), "datasets", "tpch", "tpch-dbgen", "region.tbl")
+APARTMENTS_CSV = os.path.join(os.path.dirname(__file__), "datasets", "apartments_for_rent_clasified", "apartments_for_rent_classified_10K.csv")
 
+def load_apartments_frequencies(max_rows=100000):
+    freqs = Counter()
+    with open(APARTMENTS_CSV, "r", encoding="utf-8", errors="replace") as f:
+        reader = csv.DictReader(f, delimiter=';')
+        for i, row in enumerate(reader):
+            if i >= max_rows:
+                break
+            state = row.get("state", "").strip()
+            if state:
+                freqs[state] += 1
+    return dict(freqs)
 def load_crime_frequencies(max_rows=100000):
     freqs = Counter()
     with open(CRIME_CSV, "r", encoding="utf-8", errors="replace") as f:

@@ -1,8 +1,9 @@
 import random
 import json
+import matplotlib.pyplot as plt
 from client import Client
 from client_seal import SealClient
-from load_data import load_crime_frequencies, load_tpch_frequencies
+from load_data import load_crime_frequencies, load_tpch_frequencies, load_apartments_frequencies
 from client_simulation import adj_padding_volumes, build_sorted_array, simulate_seal_access
 
 def query_recovery_attack(padded_volumes, queries_with_volumes):
@@ -109,10 +110,80 @@ nation = 4
 region = 3
 '''
 
-NUM_QUERIES = 100
+def extract_trace_from_actual_seal(seal, query_sequence):
+    query_results_volumes = []
+    query_results_tuples = []
+    
+    index_to_oram = {}
+    for i in range(len(seal.M)):
+        index_to_oram[i] = seal._prp_to_oram(i)
+        
+    for kw in query_sequence:
+        if kw not in seal.odict_data:
+            continue
+        seal.clear_access_log()
+        _ = seal.search(kw)
+        access_log = seal.get_access_log()
+        
+        i_w, cnt_w = seal.odict_data[kw]
+        
+        tuples = []
+        for idx_offset, oram_id in enumerate(access_log):
+            i = i_w + idx_offset
+            tuples.append({"oram_id": oram_id, "index": i})
+            
+        query_results_volumes.append((kw, cnt_w))
+        query_results_tuples.append((kw, tuples))
+        
+    return query_results_volumes, query_results_tuples, index_to_oram
+
+def test_simulation_equivalence(num_of_queries, attribute):
+    apartments_freqs = load_apartments_frequencies(max_rows=10000) # liteeraly the max
+    
+    dataset = {}
+    doc_idx = 0
+    for kw, count in apartments_freqs.items():
+        if kw == "__dummy_kw__": continue
+        dataset[kw] = [f"doc_{doc_idx + i}" for i in range(count)]
+        doc_idx += count
+        
+    x = 2
+    alpha = 2
+    
+    print("Initializing SEAL")
+    seal = SealClient(alpha=alpha, dataset=dataset, x=x)
+    
+    keyword_volumes = {k: len(v) for k, v in dataset.items()}
+    padded_volumes = adj_padding_volumes(keyword_volumes, x)
+    M, odict = build_sorted_array(padded_volumes)
+    
+    keywords = list(keyword_volumes.keys())
+    query_sequence = random.choices(
+        keywords,
+        weights=[keyword_volumes[kw] for kw in keywords],
+        k=num_of_queries
+    )
+    
+    print("Getting both of them set up lol no error till here")
+    qr_vol_sim, qr_tup_sim, idx_to_oram_sim = simulate_seal_access(alpha, M, odict, query_sequence)
+    qr_vol_actual, qr_tup_actual, idx_to_oram_actual = extract_trace_from_actual_seal(seal, query_sequence)
+    padded_actual = {kw: len(docs) for kw, docs in seal._adj_padding(dataset, x).items()}
+
+    dr_success_sim = database_recovery_attack(padded_volumes, qr_tup_sim, alpha, idx_to_oram_sim)
+    dr_success_actual = database_recovery_attack(padded_actual, qr_tup_actual, alpha, idx_to_oram_actual)
+    
+    qr_success_sim = query_recovery_attack(padded_volumes, qr_vol_sim)
+    qr_success_actual = query_recovery_attack(padded_actual, qr_vol_actual)
+    
+    print(f"Simulation DR Success: {dr_success_sim:.10%}")
+    print(f"Actual SEAL DR Success: {dr_success_actual:.10%}")
+    print(f"Simulation QR Success: {qr_success_sim:.10%}")
+    print(f"Actual SEAL QR Success: {qr_success_actual:.10%}")
+    return dr_success_sim, dr_success_actual, qr_success_sim, qr_success_actual
+
+
 ALPHA_VALUES = [0, 1, 2, 3, 4]
 X_VALUES = [1, 2, 4]
-ATTRIBUTE = 3
 
 def test_simulation():
     # load datasets
@@ -157,6 +228,34 @@ def test_simulation():
     print("results made")
 
 if __name__ == "__main__":
-    test_path_oram()
-    test_seal()
-    test_simulation()
+    # test_path_oram()
+    # test_seal()
+    # test_simulation()
+
+    # comment this out to remove the simulation equivalence test
+    dr_sim_results = []
+    dr_act_results = []
+    qr_sim_results = []
+    qr_act_results = []
+    list_of_queries = [10, 100, 1000, 10000]
+    for queries in list_of_queries:
+        dr_sim, dr_act, qr_sim, qr_act = test_simulation_equivalence(queries, 3)
+        dr_sim_results.append(dr_sim)
+        dr_act_results.append(dr_act)
+        qr_sim_results.append(qr_sim)
+        qr_act_results.append(qr_act)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(list_of_queries, dr_sim_results, label='Simulation DR', marker='o', linestyle='-', color='blue')
+    plt.plot(list_of_queries, dr_act_results, label='Actual SEAL DR', marker='x', linestyle='--', color='lightblue')
+    
+    plt.plot(list_of_queries, qr_sim_results, label='Simulation QR', marker='s', linestyle='-', color='red')
+    plt.plot(list_of_queries, qr_act_results, label='Actual SEAL QR', marker='d', linestyle='--', color='lightcoral')
+    
+    plt.xscale('log')
+    plt.xlabel('Number of Queries')
+    plt.ylabel('Attack Success Rate')
+    plt.title('Convergence of Database and Query Recovery Attacks')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('convergence_plot.png')

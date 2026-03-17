@@ -62,7 +62,7 @@ def simulate_seal_access(alpha, M, odict, query_sequence):
 
     index_to_oram = {}
     for i in range(len(M)):
-        index_to_oram[i] = prp_to_oram(i)
+        index_to_oram[i] = prp_to_oram(prp, alpha, num_orams, i)
 
     query_results_volumes = []
     query_results_tuples = []
@@ -78,7 +78,7 @@ def simulate_seal_access(alpha, M, odict, query_sequence):
 
     return query_results_volumes, query_results_tuples, index_to_oram
 
-def prp_to_oram(index):
+def prp_to_oram(prp, alpha, num_orams, index):
     padded = str(index).encode().ljust(16, b'\x00')[:16]
     nonce = b'\x00' * 12
     encrypted = prp.encrypt(nonce, padded, None)

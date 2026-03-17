@@ -52,6 +52,8 @@ class Client:
 
     def _retrieve_from_server(self, leaf):
         buckets = self.server.traverse_path(leaf)
+        # we forgot to make sure we can write at the position becomes a problem in SEAL implementation
+        dummy_block = {"key": "", "value": "", "is_dummy": True}
         for bucket in buckets:
             for block in bucket.blocks:
                 decrypted = self._decrypt_block(block.encrypted_data)
@@ -59,6 +61,7 @@ class Client:
                     existing = next((s for s in self.stash if s["key"] == decrypted["key"]), None)
                     if existing is None:
                         self.stash.append(decrypted)
+                block.encrypted_data = self._encrypt_block(dummy_block)
     
     def _add_to_bucket(self, index, encrypted_block):
         bucket = self.server.get_bucket(index)
@@ -109,7 +112,6 @@ class Client:
         self.position_map[key] = self._random_leaf()
 
         self._write_back(leaf) # put things back to server
-        print(f"read({key}) = {result}")
         return result
 
     def write(self, key, value):
@@ -127,5 +129,4 @@ class Client:
             self.stash.append({"key": key, "value": value, "is_dummy": False})
 
         self._write_back(leaf_for_adding)  # put things back to server
-        print(f"write({key}) = {value}")
         return value
