@@ -1,6 +1,5 @@
 datasets/
 *.png
-*.txt
 *.json
 *.log
 __pycache__/
