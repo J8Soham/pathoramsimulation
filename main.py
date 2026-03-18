@@ -222,7 +222,11 @@ def test_simulation():
                 }
                 print(f"  alpha={alpha}, x={x}: QR={qr_success:.2%}, DR={dr_success:.2%}")
 
-        all_results[name] = results
+        all_results[name] = {
+            "results": results,
+            "random_baseline": 1.0 / len(keywords) if keywords else 0,
+            "greedy_baseline": max(keyword_volumes[kw] for kw in keywords) / sum(keyword_volumes[kw] for kw in keywords) if keywords else 0
+        }
 
     with open("results.json", "w") as f:
         json.dump(all_results, f, indent=2)
@@ -231,15 +235,36 @@ def test_simulation():
         fig, axes = plt.subplots(1, 2, figsize=(16, 6))
         for i, (name, title) in enumerate([("crime", "Crime Dataset"), ("tpch", "TPC-H Orders Dataset")]):
             ax = axes[i]
-            for x in X_VALUES:
-                y_values = []
-                for alpha in ALPHA_VALUES:
-                    key = f"a{alpha}_x{x}"
-                    if key in all_results[name]:
-                        y_values.append(all_results[name][key][metric_key] * 100) # percentage
-                ax.plot(ALPHA_VALUES[:len(y_values)], y_values, marker='o', label=f"x={x}")
+            if name not in all_results:
+                continue
+                
+            dataset_data = all_results[name]
+            results_dict = dataset_data["results"]
             
-            ax.set_xlabel("Alpha (bits)")
+            if metric_key == "query_recovery":
+                y_values = []
+                for x in X_VALUES:
+                    key = f"a{ALPHA_VALUES[0]}_x{x}"
+                    if key in results_dict:
+                        y_values.append(results_dict[key][metric_key] * 100)
+                ax.plot(X_VALUES[:len(y_values)], y_values, marker='o', label="Attack Success Rate")
+                ax.set_xlabel("x (Padding parameter)")
+                
+                baseline = dataset_data["random_baseline"] * 100
+                ax.axhline(y=baseline, color='black', linestyle='--', linewidth=2, label='Random Strategy Base')
+            else:
+                for x in X_VALUES:
+                    y_values = []
+                    for alpha in ALPHA_VALUES:
+                        key = f"a{alpha}_x{x}"
+                        if key in results_dict:
+                            y_values.append(results_dict[key][metric_key] * 100)
+                    ax.plot(ALPHA_VALUES[:len(y_values)], y_values, marker='o', label=f"x={x}")
+                ax.set_xlabel("Alpha (bits)")
+                
+                baseline = dataset_data["greedy_baseline"] * 100
+                ax.axhline(y=baseline, color='black', linestyle='--', linewidth=2, label='Greedy Strategy Base')
+                
             ax.set_ylabel(f"{metric_name} Success Rate (%)")
             ax.set_title(title)
             ax.legend()
