@@ -30,7 +30,7 @@ builds sorted array M and ODICT from keyword volumes,
 where M is array of (keyword, doc_id) pairs sorted lexicographically by keyword
 and ODICT maps each keyword to (start_index, count) in M
 '''
-def build_sorted_array(keyword_volumes):
+def build_sorted_array(keyword_volumes): # step 3 in client_seal init
     M = []
     for keyword in sorted(keyword_volumes.keys()):
         for j in range(keyword_volumes[keyword]):

@@ -6,6 +6,13 @@ from client import Client
 
 class SealClient:
     def __init__(self, alpha, dataset, x=1, bucket_size=4):
+        '''
+        1. intializes variable
+        2. pads the dataset
+        3. creates sorted array M
+        4. creates ODICT and then write
+        5. creates ORAMs and then write
+        '''
         self.alpha = alpha
         self.x = x
         self.num_orams = 1 << alpha
@@ -14,16 +21,16 @@ class SealClient:
         self.prp = AESGCM(self.prp_key)
         self.access_log = []
 
-        padded_dataset = self._adj_padding(dataset, x)  
+        padded_dataset = self._adj_padding(dataset, x)
 
-        self.M = []
+        self.M = [] # step 3
         for keyword in sorted(padded_dataset.keys()):
             for doc_id in padded_dataset[keyword]:
                 self.M.append((keyword, doc_id))
         N = len(self.M)
 
-        self.odict_data = {}
-        current_keyword = None
+        self.odict_data = {} # step 4
+        current_keyword = None 
         start_idx = 0
         for i, (kw, _) in enumerate(self.M):
             if kw != current_keyword:
@@ -34,17 +41,17 @@ class SealClient:
         if current_keyword is not None:
             self.odict_data[current_keyword] = (start_idx, N - start_idx)
 
-        items_per_oram = max(1, N // self.num_orams) if self.num_orams > 0 else N
-        num_levels = max(2, math.ceil(math.log2(max(items_per_oram, 2))) + 1)
-        self.orams = [Client(num_levels, bucket_size) for _ in range(self.num_orams)]
-
         odict_levels = max(2, math.ceil(math.log2(max(len(padded_dataset), 2))) + 1)
         self.odict_oram = Client(odict_levels, bucket_size)
 
-        for keyword, (start_idx, cnt) in self.odict_data.items():
+        for keyword, (start_idx, cnt) in self.odict_data.items(): # odict add
             self.odict_oram.write(keyword, json.dumps({"i": start_idx, "c": cnt}))
 
-        for i, (kw, doc_id) in enumerate(self.M):
+        items_per_oram = max(1, N // self.num_orams) if self.num_orams > 0 else N
+        num_levels = max(2, math.ceil(math.log2(max(items_per_oram, 2))) + 1)
+        self.orams = [Client(num_levels, bucket_size) for _ in range(self.num_orams)] # step 5
+
+        for i, (kw, doc_id) in enumerate(self.M): # oram add
             value = doc_id if doc_id is not None else ""
             oram_idx = self._prp_to_oram(i)
             self.orams[oram_idx].write(str(i), value)
@@ -84,9 +91,13 @@ class SealClient:
         encrypted = self.prp.encrypt(nonce, padded, None)
         if self.alpha == 0:
             return 0
-        return encrypted[0] % self.num_orams
+        return encrypted[0] & (self.num_orams - 1) # small optimization see https://stackoverflow.com/questions/5454574/how-do-computers-find-modulus
 
     def search(self, keyword):
+        '''
+        Basically performs the reads from the ORAM 
+        ODICT serves as which index range to read from the ORAM
+        '''
         odict_result = self.odict_oram.read(keyword)
         if odict_result is None:
             return []

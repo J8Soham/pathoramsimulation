@@ -53,6 +53,7 @@ def database_recovery_attack(padded_volumes, queries_with_tuples, alpha, index_t
         T.pop(q_prime, None)
     return correct / total_tuples if total_tuples > 0 else 0.0
 
+
 def test_path_oram():
     client = Client(num_levels=4, bucket_size=4)
     client.write("a", "apple")
@@ -97,7 +98,6 @@ def test_seal():
                 for block in bucket.blocks:
                     if block.encrypted_data is not None:
                         assert isinstance(block.encrypted_data, bytes), "SEAL oram data should be raw bytes"
-
 
 '''
 orders = 9
