@@ -78,6 +78,38 @@ def simulate_seal_access(alpha, M, odict, query_sequence):
 
     return query_results_volumes, query_results_tuples, index_to_oram
 
+
+'''
+same as simulate_seal_access but using the actual SEAL ORAMs to get the actual accessed indices and oram_ids and padded volumes from ORAMs
+'''
+
+def get_volume_tuples_from_actual_seal(seal, query_sequence):
+    query_results_volumes = []
+    query_results_tuples = []
+    
+    index_to_oram = {}
+    for i in range(len(seal.M)):
+        index_to_oram[i] = seal._prp_to_oram(i)
+        
+    for kw in query_sequence:
+        if kw not in seal.odict_data:
+            continue
+        seal.clear_access_log()
+        _ = seal.search(kw)
+        access_log = seal.get_access_log()
+        
+        i_w, cnt_w = seal.odict_data[kw]
+        
+        tuples = []
+        for idx_offset, oram_id in enumerate(access_log):
+            i = i_w + idx_offset
+            tuples.append({"oram_id": oram_id, "index": i})
+            
+        query_results_volumes.append((kw, cnt_w))
+        query_results_tuples.append((kw, tuples))
+        
+    return query_results_volumes, query_results_tuples, index_to_oram
+
 def prp_to_oram(prp, alpha, num_orams, index):
     padded = str(index).encode().ljust(16, b'\x00')[:16]
     nonce = b'\x00' * 12

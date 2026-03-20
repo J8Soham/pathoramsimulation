@@ -3,8 +3,8 @@ import json
 import matplotlib.pyplot as plt
 from client import Client
 from client_seal import SealClient
-from load_data import load_crime_frequencies, load_tpch_frequencies, load_apartments_frequencies
-from client_simulation import adj_padding_volumes, build_sorted_array, simulate_seal_access
+from load_data import load_crime_frequencies, load_tpch_frequencies, load_apartments_frequencies, load_crime_all_frequencies, load_apartments_all_frequencies, load_tpch_supplier_nation_join
+from client_simulation import adj_padding_volumes, build_sorted_array, simulate_seal_access, get_volume_tuples_from_actual_seal
 
 def query_recovery_attack(padded_volumes, queries_with_volumes):
     T = dict(padded_volumes)
@@ -15,7 +15,6 @@ def query_recovery_attack(padded_volumes, queries_with_volumes):
         if not candidates:
             continue
         q_prime = random.choice(candidates)
-        T.pop(q_prime)
         if q_prime == t_q:
             correct += 1
     return correct / total if total > 0 else 0.0
@@ -100,7 +99,8 @@ def test_seal():
                         assert isinstance(block.encrypted_data, bytes), "SEAL oram data should be raw bytes"
 
 '''
-orders = 9
+number of attributes in each for TPC-H
+orders = 9 (attribute 5 is ORDER DATE)
 lineitem = 16
 customer = 8
 part = 9
@@ -108,34 +108,30 @@ partsupp = 5
 supplier = 7
 nation = 4
 region = 3
+
+Crime and apartments have 22
+5th from crime is IUCR
 '''
 
-def extract_trace_from_actual_seal(seal, query_sequence):
-    query_results_volumes = []
-    query_results_tuples = []
-    
-    index_to_oram = {}
-    for i in range(len(seal.M)):
-        index_to_oram[i] = seal._prp_to_oram(i)
-        
-    for kw in query_sequence:
-        if kw not in seal.odict_data:
-            continue
-        seal.clear_access_log()
-        _ = seal.search(kw)
-        access_log = seal.get_access_log()
-        
-        i_w, cnt_w = seal.odict_data[kw]
-        
-        tuples = []
-        for idx_offset, oram_id in enumerate(access_log):
-            i = i_w + idx_offset
-            tuples.append({"oram_id": oram_id, "index": i})
-            
-        query_results_volumes.append((kw, cnt_w))
-        query_results_tuples.append((kw, tuples))
-        
-    return query_results_volumes, query_results_tuples, index_to_oram
+ALPHA_VALUES = [0, 4, 8, 12, 16, 20, 24]
+X_VALUES = [1, 2, 4, 8, 16, 32, 64]
+NUM_QUERIES = 1000 # choosen because reasonable time & accuracy 10000 would take hours lol
+ATTRIBUTE = 5
+
+''' 
+Second generation of tests for over attributes by learning from first as well recreate from SEAL
+'''
+# over various attributes (i.e. like train for # line in above)
+QUERY_SUBSET_X_VALUES = [0, 2, 4, 16] # powers of two versions
+QUERY_SUBSET_X_VALUES_UNEVEN = [0, 1, 3, 5] # uneven padding
+
+# over all attributes in crime and apartments so 22
+DATABASE_SUBSET_X_VALUES = [0, 2, 4, 8]
+DATABASE_SUBSET_ALPHA_VALUES = [0, 8, 16, 20, 32]
+
+# foreign key joins if possible 
+FK_X_VALUES = [0, 2, 4, 8]
+FK_ALPHA_VALUES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 def test_simulation_equivalence(num_of_queries, attribute):
     apartments_freqs = load_apartments_frequencies(max_rows=10000) # liteeraly the max
@@ -166,7 +162,7 @@ def test_simulation_equivalence(num_of_queries, attribute):
     
     print("Getting both of them set up lol no error till here")
     qr_vol_sim, qr_tup_sim, idx_to_oram_sim = simulate_seal_access(alpha, M, odict, query_sequence)
-    qr_vol_actual, qr_tup_actual, idx_to_oram_actual = extract_trace_from_actual_seal(seal, query_sequence)
+    qr_vol_actual, qr_tup_actual, idx_to_oram_actual = get_volume_tuples_from_actual_seal(seal, query_sequence)
     padded_actual = {kw: len(docs) for kw, docs in seal._adj_padding(dataset, x).items()}
 
     dr_success_sim = database_recovery_attack(padded_volumes, qr_tup_sim, alpha, idx_to_oram_sim)
@@ -180,11 +176,6 @@ def test_simulation_equivalence(num_of_queries, attribute):
     print(f"Simulation QR Success: {qr_success_sim:.10%}")
     print(f"Actual SEAL QR Success: {qr_success_actual:.10%}")
     return dr_success_sim, dr_success_actual, qr_success_sim, qr_success_actual
-
-ALPHA_VALUES = [0, 4, 8, 12, 16, 20, 24]
-X_VALUES = [1, 2, 4, 8, 16, 32, 64]
-NUM_QUERIES = 1000
-ATTRIBUTE = 5
 
 def test_simulation():
     # load datasets
@@ -273,10 +264,172 @@ def test_simulation():
         plt.tight_layout()
         plt.savefig(f"{metric_key}_plot.png")
 
+def test_simulation_second_gen():
+    num_queries = NUM_QUERIES
+    num_order_attrs = 9
+    tpch_all_cols = load_tpch_frequencies("orders", max_rows=10000)
+
+    for x_label, x_values in [("powers", QUERY_SUBSET_X_VALUES), ("uneven", QUERY_SUBSET_X_VALUES_UNEVEN)]:
+        fig, ax = plt.subplots(1, 1, figsize=(14, 6))
+        
+        for x in x_values:
+            qr_rates = []
+            for attr_i in range(num_order_attrs):
+                keyword_volumes = tpch_all_cols[attr_i]
+                keywords = [kw for kw in keyword_volumes.keys()]
+                padded_volumes = adj_padding_volumes(keyword_volumes, x)
+                M, odict = build_sorted_array(padded_volumes)
+                query_sequence = random.choices(keywords, weights=[keyword_volumes[kw] for kw in keywords], k=num_queries)
+                qr_volumes, _, _ = simulate_seal_access(2, M, odict, query_sequence)
+                qr_success = query_recovery_attack(padded_volumes, qr_volumes)
+                qr_rates.append(qr_success * 100)
+                print(f"  [{x_label}] attr={attr_i}, x={x}: QR={qr_success:.2%}")
+            label = "No Padding" if x == 0 else f"x={x}"
+            ax.plot(range(num_order_attrs), qr_rates, marker='o', label=label)
+
+        random_baselines = []
+        for attr_i in range(num_order_attrs):
+            kw_vol = tpch_all_cols[attr_i]
+            keywords = [kw for kw in kw_vol.keys()]
+            random_baselines.append((1.0 / len(keywords) * 100) if keywords else 0)
+        
+        ax.plot(range(num_order_attrs), random_baselines, color='black', linestyle='--', linewidth=2, marker='s', label='Random')
+        ax.set_xlabel("Attribute i")
+        ax.set_ylabel("QR Success Rate (%)")
+        ax.set_title(f"Query Recovery Attack - TPC-H Orders ({x_label} x values)")
+        ax.set_xticks(range(num_order_attrs))
+        ax.legend()
+        ax.grid(True)
+        plt.tight_layout()
+        plt.savefig(f"qr_orders_{x_label}_plot.png")
+
+    crime_all = load_crime_all_frequencies(max_rows=10000)
+    crime_columns = crime_all["columns"]
+    crime_data = crime_all["data"]
+    num_crime_attrs = len(crime_columns)
+
+    for x in DATABASE_SUBSET_X_VALUES:
+        fig, ax = plt.subplots(1, 1, figsize=(14, 6))
+
+        for alpha in DATABASE_SUBSET_ALPHA_VALUES:
+            dr_rates = []
+            for attr_i in range(num_crime_attrs):
+                keyword_volumes = crime_data[attr_i]
+                keywords = [kw for kw in keyword_volumes.keys()]
+                effective_x = 0 if alpha == 0 else x  # alpha=0 = plain Path-ORAM, no padding
+                padded_volumes = adj_padding_volumes(keyword_volumes, effective_x)
+                M, odict = build_sorted_array(padded_volumes)
+                query_sequence = random.choices(keywords, weights=[keyword_volumes[kw] for kw in keywords], k=num_queries)
+                _, qr_tuples, index_to_oram = simulate_seal_access(alpha, M, odict, query_sequence)
+                dr_success = database_recovery_attack(padded_volumes, qr_tuples, alpha, index_to_oram)
+                dr_rates.append(dr_success * 100)
+                print(f"  Crime attr={attr_i} ({crime_columns[attr_i]}), alpha={alpha}, x={effective_x}: DR={dr_success:.2%}")
+            ax.plot(range(num_crime_attrs), dr_rates, marker='o', label=f"\u03b1={alpha}")
+
+        greedy_baselines = []
+        for attr_i in range(num_crime_attrs):
+            kw_vol = crime_data[attr_i]
+            keywords = [kw for kw in kw_vol.keys()]
+            if keywords:
+                total = sum(kw_vol[kw] for kw in keywords)
+                greedy_baselines.append(max(kw_vol[kw] for kw in keywords) / total * 100)
+            else:
+                greedy_baselines.append(0)
+    
+        ax.plot(range(num_crime_attrs), greedy_baselines, color='black', linestyle='--', linewidth=2, marker='s', label='Greedy')
+        x_label = "\u22a5" if x == 0 else str(x)
+        ax.set_xlabel("Attribute i")
+        ax.set_ylabel("DR Success Rate (%)")
+        ax.set_title(f"Database Recovery Attack - Crime Dataset (x={x_label})")
+        ax.set_xticks(range(num_crime_attrs))
+        ax.set_xticklabels(range(num_crime_attrs), fontsize=8)
+        ax.legend(fontsize=8)
+        ax.grid(True)
+        plt.tight_layout()
+        plt.savefig(f"dr_crime_x{x}_plot.png")
+
+    apt_all = load_apartments_all_frequencies(max_rows=10000)
+    apt_columns = apt_all["columns"]
+    apt_data = apt_all["data"]
+    num_apt_attrs = len(apt_columns)
+
+    for x in DATABASE_SUBSET_X_VALUES:
+        fig, ax = plt.subplots(1, 1, figsize=(14, 6))
+
+        for alpha in DATABASE_SUBSET_ALPHA_VALUES:
+            dr_rates = []
+            for attr_i in range(num_apt_attrs):
+                keyword_volumes = apt_data[attr_i]
+                keywords = [kw for kw in keyword_volumes.keys()]
+                effective_x = 0 if alpha == 0 else x  # alpha=0 = plain Path-ORAM, no padding
+                padded_volumes = adj_padding_volumes(keyword_volumes, effective_x)
+                M, odict = build_sorted_array(padded_volumes)
+                query_sequence = random.choices(keywords, weights=[keyword_volumes[kw] for kw in keywords], k=num_queries)
+                _, qr_tuples, index_to_oram = simulate_seal_access(alpha, M, odict, query_sequence)
+                dr_success = database_recovery_attack(padded_volumes, qr_tuples, alpha, index_to_oram)
+                dr_rates.append(dr_success * 100)
+                print(f"  Apartments attr={attr_i} ({apt_columns[attr_i]}), alpha={alpha}, x={effective_x}: DR={dr_success:.2%}")
+            ax.plot(range(num_apt_attrs), dr_rates, marker='o', label=f"\u03b1={alpha}")
+
+        greedy_baselines = []
+        for attr_i in range(num_apt_attrs):
+            kw_vol = apt_data[attr_i]
+            keywords = [kw for kw in kw_vol.keys()]
+            if keywords:
+                total = sum(kw_vol[kw] for kw in keywords)
+                greedy_baselines.append(max(kw_vol[kw] for kw in keywords) / total * 100)
+            else:
+                greedy_baselines.append(0)
+    
+        ax.plot(range(num_apt_attrs), greedy_baselines, color='black', linestyle='--', linewidth=2, marker='s', label='Greedy')
+        x_label = "\u22a5" if x == 0 else str(x)
+        ax.set_xlabel("Attribute i")
+        ax.set_ylabel("DR Success Rate (%)")
+        ax.set_title(f"Database Recovery Attack - Apartments Dataset (x={x_label})")
+        ax.set_xticks(range(num_apt_attrs))
+        ax.set_xticklabels(range(num_apt_attrs), fontsize=8)
+        ax.legend(fontsize=8)
+        ax.grid(True)
+        plt.tight_layout()
+        plt.savefig(f"dr_apartments_x{x}_plot.png")
+
+    supplier_nation_cols = load_tpch_supplier_nation_join(max_rows=10000)
+    keyword_volumes = supplier_nation_cols[7]
+    keywords = [kw for kw in keyword_volumes.keys()]
+
+    fig, ax = plt.subplots(1, 1, figsize=(14, 6))
+
+    for x in FK_X_VALUES:
+        dr_rates = []
+        for alpha in FK_ALPHA_VALUES:
+            effective_x = 0 if alpha == 0 else x
+            padded_volumes = adj_padding_volumes(keyword_volumes, effective_x)
+            M, odict = build_sorted_array(padded_volumes)
+            query_sequence = random.choices(keywords, weights=[keyword_volumes[kw] for kw in keywords], k=num_queries)
+            _, qr_tuples, index_to_oram = simulate_seal_access(alpha, M, odict, query_sequence)
+            dr_success = database_recovery_attack(padded_volumes, qr_tuples, alpha, index_to_oram)
+            dr_rates.append(dr_success * 100)
+            print(f"  Supplier\u22c8Nation alpha={alpha}, x={effective_x}: DR={dr_success:.2%}")
+        label = "No Padding" if x == 0 else f"x={x}"
+        ax.plot(FK_ALPHA_VALUES, dr_rates, marker='o', label=label)
+
+    total = sum(keyword_volumes[kw] for kw in keywords)
+    greedy = max(keyword_volumes[kw] for kw in keywords) / total * 100
+    ax.axhline(y=greedy, color='black', linestyle='--', linewidth=2, label='Greedy')
+
+    ax.set_xlabel("Alpha (bits)")
+    ax.set_ylabel("DR Success Rate (%)")
+    ax.set_title(f"Database Recovery Attack - Supplier \u22c8 Nation (NATION_NAME)")
+    ax.legend()
+    ax.grid(True)
+    plt.tight_layout()
+    plt.savefig(f"dr_supplier_nation_plot.png")
+
+
 if __name__ == "__main__":
     # test_path_oram()
     # test_seal()
-    test_simulation()
+    # test_simulation()
 
     # comment this out to remove the simulation equivalence test - should probably put this in a function. 
     # dr_sim_results = []
@@ -305,3 +458,5 @@ if __name__ == "__main__":
     # plt.legend()
     # plt.grid(True)
     # plt.savefig('convergence_plot.png')
+
+    test_simulation_second_gen()
